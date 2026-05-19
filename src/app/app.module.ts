@@ -8,7 +8,6 @@ import { AlertComponent } from './_components/alert.component';
 import { appInitializer } from './_helpers/app.initializer';
 import { JwtInterceptor } from './_helpers/jwt.interceptor';
 import { ErrorInterceptor } from './_helpers/error.interceptor';
-import { fakeBackendProvider } from './_helpers/fake-backend';
 import { AccountService } from './_services/account.service';
 
 @NgModule({
@@ -18,8 +17,7 @@ import { AccountService } from './_services/account.service';
     { provide: APP_INITIALIZER, useFactory: appInitializer, deps: [AccountService], multi: true },
     provideHttpClient(withInterceptorsFromDi()),
     { provide: HTTP_INTERCEPTORS, useClass: JwtInterceptor, multi: true },
-    { provide: HTTP_INTERCEPTORS, useClass: ErrorInterceptor, multi: true },
-    fakeBackendProvider
+    { provide: HTTP_INTERCEPTORS, useClass: ErrorInterceptor, multi: true }
   ],
   bootstrap: [AppComponent]
 })
