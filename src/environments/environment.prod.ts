@@ -1,4 +1,4 @@
 export const environment = {
   production: true,
-  apiUrl: 'https://YOUR-RAILWAY-BACKEND-URL.up.railway.app'
+  apiUrl: 'https://angular-auth-boilerplate-lisao.up.railway.app'
 };
