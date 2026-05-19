@@ -1,5 +1,6 @@
 require('dotenv').config();
 const express = require('express');
+const path = require('path');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
 const errorHandler = require('./middleware/error-handler');
@@ -21,9 +22,18 @@ app.use(cors({
 // API routes
 app.use('/accounts', require('./routes/accounts'));
 
-// Health check endpoint
-app.get('/', (req, res) => {
-  res.json({ message: 'Angular Auth API is running 🚀' });
+// Serve Angular frontend (production build)
+const frontendPath = path.join(__dirname, 'public');
+app.use(express.static(frontendPath));
+
+// Catch-all: serve Angular index.html for client-side routing
+app.get('*', (req, res) => {
+  const indexPath = path.join(frontendPath, 'index.html');
+  if (require('fs').existsSync(indexPath)) {
+    res.sendFile(indexPath);
+  } else {
+    res.json({ message: 'Angular Auth API is running 🚀' });
+  }
 });
 
 // Global error handler
