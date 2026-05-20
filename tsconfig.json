@@ -12,7 +12,6 @@
     "target": "ES2022",
     "module": "ES2022",
     "moduleResolution": "bundler",
-    "baseUrl": "./",
     "paths": {
       "@app/*": ["src/app/*"],
       "@environments/*": ["src/environments/*"]
