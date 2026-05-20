@@ -1,59 +1,102 @@
-# AngularAuthBoilerplate
+# Angular Auth Boilerplate — Frontend
 
-This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 21.2.9.
+Angular 21 authentication boilerplate with JWT, role-based access control, email verification, and a premium dark-themed UI.
 
-## Development server
+## 🌐 Live Deployment
 
-To start a local development server, run:
+- **Frontend**: [https://angular-auth-boilerplate.onrender.com](https://angular-auth-boilerplate.onrender.com)
+- **Backend API**: [https://node-mysql-api-production.up.railway.app](https://node-mysql-api-production.up.railway.app)
+- **API Docs (Swagger)**: [https://node-mysql-api-production.up.railway.app/api-docs](https://node-mysql-api-production.up.railway.app/api-docs)
 
+## 🚀 Features
+
+- **Registration** with email verification flow
+- **Login / Logout** with JWT + Refresh Token
+- **Role-Based Access Control** (Admin panel restricted to Admin users)
+- **Profile Management** (view & update account details)
+- **Admin Panel** (manage all accounts — CRUD operations)
+- **Forgot Password / Reset Password** flow
+- **Fake Backend** for offline testing (Stage A demo)
+- **Premium dark-themed UI** with glassmorphism design
+
+## 📦 Tech Stack
+
+| Technology | Purpose |
+|---|---|
+| Angular 21 | Frontend framework |
+| TypeScript | Type-safe development |
+| RxJS | Reactive state management |
+| Bootstrap 5 | UI component library |
+| LESS | CSS preprocessor |
+
+## 🛠️ Setup Instructions
+
+### Prerequisites
+- Node.js 18+
+- Angular CLI (`npm install -g @angular/cli`)
+
+### 1. Clone the repository
+```bash
+git clone https://github.com/shiboo28/angular-auth-boilerplate.git
+cd angular-auth-boilerplate
+```
+
+### 2. Install dependencies
+```bash
+npm install
+```
+
+### 3. Configure API URL
+Edit `src/environments/environment.ts`:
+```typescript
+export const environment = {
+  production: false,
+  apiUrl: 'http://localhost:4000' // Your backend API URL
+};
+```
+
+### 4. Run development server
 ```bash
 ng serve
 ```
+Open [http://localhost:4200](http://localhost:4200)
 
-Once the server is running, open your browser and navigate to `http://localhost:4200/`. The application will automatically reload whenever you modify any of the source files.
-
-## Code scaffolding
-
-Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
-
+### 5. Build for production
 ```bash
-ng generate component component-name
+ng build --configuration production
 ```
 
-For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
+## 🧪 Testing Modes
 
-```bash
-ng generate --help
+### Stage A: Fake Backend (Offline Testing)
+Enable the fake backend interceptor in `src/app/app.module.ts`:
+```typescript
+providers: [
+  // ... other providers
+  fakeBackendProvider  // Add this line
+]
 ```
 
-## Building
+### Stage B: Live API (Integration Testing)
+Disable the fake backend and set `apiUrl` in `environment.prod.ts` to your deployed backend URL.
 
-To build the project run:
+## 📂 Project Structure
 
-```bash
-ng build
+```
+src/app/
+├── _components/     # Shared components (Alert)
+├── _helpers/        # Guards, interceptors, validators
+├── _models/         # TypeScript models (Account, Role)
+├── _services/       # API services (AccountService, AlertService)
+├── account/         # Login, Register, Verify, Reset flows
+├── admin/           # Admin panel (account management)
+├── home/            # Home page
+└── profile/         # User profile management
 ```
 
-This will compile your project and store the build artifacts in the `dist/` directory. By default, the production build optimizes your application for performance and speed.
+## 🔐 Authentication Flow
 
-## Running unit tests
-
-To execute unit tests with the [Vitest](https://vitest.dev/) test runner, use the following command:
-
-```bash
-ng test
-```
-
-## Running end-to-end tests
-
-For end-to-end (e2e) testing, run:
-
-```bash
-ng e2e
-```
-
-Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
-
-## Additional Resources
-
-For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
+1. **Register** → Verification email sent → Click link to verify
+2. **Login** → JWT token (15min) + Refresh token cookie (7 days)
+3. **Auto-refresh** → JWT refreshed automatically before expiry
+4. **Logout** → Revoke refresh token + clear cookie

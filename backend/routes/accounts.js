@@ -6,10 +6,32 @@ const crypto = require('crypto');
 const { Op } = require('sequelize');
 const authorize = require('../middleware/authorize');
 const { Account } = require('../helpers/db');
+const { sendVerificationEmail, sendPasswordResetEmail } = require('../helpers/send-email');
 
 // ==================== PUBLIC ROUTES ====================
 
-// POST /accounts/authenticate
+/**
+ * @swagger
+ * /accounts/authenticate:
+ *   post:
+ *     summary: Authenticate user credentials
+ *     tags: [Accounts]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/AuthenticateRequest'
+ *     responses:
+ *       200:
+ *         description: Authentication successful
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/AuthenticateResponse'
+ *       400:
+ *         description: Email or password is incorrect
+ */
 router.post('/authenticate', async (req, res, next) => {
   try {
     const { email, password } = req.body;
@@ -28,8 +50,7 @@ router.post('/authenticate', async (req, res, next) => {
     // Save refresh token as a cookie
     setRefreshTokenCookie(res, refreshToken);
 
-    // Store refresh token in DB (using resetToken field for simplicity, or you can add a separate table)
-    // For now we'll store it simply - in production you'd want a RefreshToken table
+    // Store refresh token in DB
     account.resetToken = refreshToken;
     account.resetTokenExpires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
     await account.save();
@@ -43,7 +64,22 @@ router.post('/authenticate', async (req, res, next) => {
   }
 });
 
-// POST /accounts/refresh-token
+/**
+ * @swagger
+ * /accounts/refresh-token:
+ *   post:
+ *     summary: Refresh JWT token using refresh token cookie
+ *     tags: [Accounts]
+ *     responses:
+ *       200:
+ *         description: Token refreshed successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/AuthenticateResponse'
+ *       401:
+ *         description: Unauthorised
+ */
 router.post('/refresh-token', async (req, res, next) => {
   try {
     const token = req.cookies.refreshToken;
@@ -78,7 +114,20 @@ router.post('/refresh-token', async (req, res, next) => {
   }
 });
 
-// POST /accounts/revoke-token
+/**
+ * @swagger
+ * /accounts/revoke-token:
+ *   post:
+ *     summary: Revoke refresh token (logout)
+ *     tags: [Accounts]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Token revoked
+ *       401:
+ *         description: Unauthorised
+ */
 router.post('/revoke-token', authorize(), async (req, res, next) => {
   try {
     const account = req.user;
@@ -93,7 +142,26 @@ router.post('/revoke-token', authorize(), async (req, res, next) => {
   }
 });
 
-// POST /accounts/register
+/**
+ * @swagger
+ * /accounts/register:
+ *   post:
+ *     summary: Register a new account
+ *     tags: [Accounts]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/RegisterRequest'
+ *     responses:
+ *       200:
+ *         description: Registration successful, verification email sent
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/MessageResponse'
+ */
 router.post('/register', async (req, res, next) => {
   try {
     const { title, firstName, lastName, email, password } = req.body;
@@ -102,7 +170,6 @@ router.post('/register', async (req, res, next) => {
     const existing = await Account.findOne({ where: { email } });
     if (existing) {
       // Don't reveal that email is already registered (security best practice)
-      // But still return 200 to not leak info
       return res.json({ message: 'Registration successful, please check your email for verification instructions' });
     }
 
@@ -112,7 +179,10 @@ router.post('/register', async (req, res, next) => {
     // Check if this is the first account (make it admin)
     const isFirstAccount = (await Account.count()) === 0;
 
-    // Create account - auto-verified for now (no email service)
+    // Generate verification token
+    const verificationToken = crypto.randomBytes(40).toString('hex');
+
+    // Create account — NOT verified until email is confirmed
     const account = await Account.create({
       title,
       firstName,
@@ -120,18 +190,47 @@ router.post('/register', async (req, res, next) => {
       email,
       passwordHash,
       role: isFirstAccount ? 'Admin' : 'User',
-      verified: new Date(), // Auto-verify (remove this line if you add email verification)
-      verificationToken: null,
+      verified: null, // Must verify email first
+      verificationToken,
       created: new Date()
     });
 
-    res.json({ message: 'Registration successful' });
+    // Send verification email
+    const origin = req.headers.origin || process.env.CORS_ORIGIN || `${req.protocol}://${req.get('host')}`;
+    try {
+      await sendVerificationEmail(account, origin);
+    } catch (emailErr) {
+      console.error('📧 Failed to send verification email:', emailErr.message);
+    }
+
+    res.json({ message: 'Registration successful, please check your email for verification instructions' });
   } catch (err) {
     next(err);
   }
 });
 
-// POST /accounts/verify-email
+/**
+ * @swagger
+ * /accounts/verify-email:
+ *   post:
+ *     summary: Verify email address using token from verification email
+ *     tags: [Accounts]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [token]
+ *             properties:
+ *               token:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Verification successful
+ *       400:
+ *         description: Verification failed
+ */
 router.post('/verify-email', async (req, res, next) => {
   try {
     const { token } = req.body;
@@ -149,7 +248,27 @@ router.post('/verify-email', async (req, res, next) => {
   }
 });
 
-// POST /accounts/forgot-password
+/**
+ * @swagger
+ * /accounts/forgot-password:
+ *   post:
+ *     summary: Request password reset email
+ *     tags: [Accounts]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [email]
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *     responses:
+ *       200:
+ *         description: Password reset email sent (always returns success to prevent email enumeration)
+ */
 router.post('/forgot-password', async (req, res, next) => {
   try {
     const { email } = req.body;
@@ -164,9 +283,13 @@ router.post('/forgot-password', async (req, res, next) => {
     account.resetTokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
     await account.save();
 
-    // In production, send email here with reset link
-    // For now, log the token for testing
-    console.log(`🔑 Password reset token for ${email}: ${account.resetToken}`);
+    // Send password reset email
+    const origin = req.headers.origin || process.env.CORS_ORIGIN || `${req.protocol}://${req.get('host')}`;
+    try {
+      await sendPasswordResetEmail(account, origin);
+    } catch (emailErr) {
+      console.error('📧 Failed to send password reset email:', emailErr.message);
+    }
 
     res.json({ message: 'Please check your email for password reset instructions' });
   } catch (err) {
@@ -174,7 +297,28 @@ router.post('/forgot-password', async (req, res, next) => {
   }
 });
 
-// POST /accounts/validate-reset-token
+/**
+ * @swagger
+ * /accounts/validate-reset-token:
+ *   post:
+ *     summary: Validate a password reset token
+ *     tags: [Accounts]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [token]
+ *             properties:
+ *               token:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Token is valid
+ *       400:
+ *         description: Invalid token
+ */
 router.post('/validate-reset-token', async (req, res, next) => {
   try {
     const { token } = req.body;
@@ -194,7 +338,33 @@ router.post('/validate-reset-token', async (req, res, next) => {
   }
 });
 
-// POST /accounts/reset-password
+/**
+ * @swagger
+ * /accounts/reset-password:
+ *   post:
+ *     summary: Reset password using token from reset email
+ *     tags: [Accounts]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [token, password, confirmPassword]
+ *             properties:
+ *               token:
+ *                 type: string
+ *               password:
+ *                 type: string
+ *                 minLength: 6
+ *               confirmPassword:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Password reset successful
+ *       400:
+ *         description: Invalid token
+ */
 router.post('/reset-password', async (req, res, next) => {
   try {
     const { token, password } = req.body;
@@ -223,7 +393,26 @@ router.post('/reset-password', async (req, res, next) => {
 
 // ==================== PROTECTED ROUTES ====================
 
-// GET /accounts — get all accounts (any authenticated user)
+/**
+ * @swagger
+ * /accounts:
+ *   get:
+ *     summary: Get all accounts
+ *     tags: [Accounts]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of all accounts
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Account'
+ *       401:
+ *         description: Unauthorised
+ */
 router.get('/', authorize(), async (req, res, next) => {
   try {
     const accounts = await Account.findAll();
@@ -233,7 +422,32 @@ router.get('/', authorize(), async (req, res, next) => {
   }
 });
 
-// GET /accounts/:id — get account by id
+/**
+ * @swagger
+ * /accounts/{id}:
+ *   get:
+ *     summary: Get account by ID
+ *     tags: [Accounts]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Account details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Account'
+ *       401:
+ *         description: Unauthorised
+ *       404:
+ *         description: Account not found
+ */
 router.get('/:id', authorize(), async (req, res, next) => {
   try {
     // Users can only get their own account, admins can get any
@@ -250,7 +464,93 @@ router.get('/:id', authorize(), async (req, res, next) => {
   }
 });
 
-// PUT /accounts/:id — update account
+/**
+ * @swagger
+ * /accounts:
+ *   post:
+ *     summary: Create a new account (Admin only)
+ *     tags: [Accounts]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/RegisterRequest'
+ *     responses:
+ *       200:
+ *         description: Account created
+ *       401:
+ *         description: Unauthorised
+ */
+router.post('/', authorize('Admin'), async (req, res, next) => {
+  try {
+    const { title, firstName, lastName, email, password, role } = req.body;
+
+    const existing = await Account.findOne({ where: { email } });
+    if (existing) return res.status(400).json({ message: 'Email is already registered' });
+
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    const account = await Account.create({
+      title,
+      firstName,
+      lastName,
+      email,
+      passwordHash,
+      role: role || 'User',
+      verified: new Date(),
+      created: new Date()
+    });
+
+    res.json(basicDetails(account));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * @swagger
+ * /accounts/{id}:
+ *   put:
+ *     summary: Update an account
+ *     tags: [Accounts]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               title:
+ *                 type: string
+ *               firstName:
+ *                 type: string
+ *               lastName:
+ *                 type: string
+ *               email:
+ *                 type: string
+ *               password:
+ *                 type: string
+ *               role:
+ *                 type: string
+ *                 enum: [Admin, User]
+ *     responses:
+ *       200:
+ *         description: Account updated
+ *       401:
+ *         description: Unauthorised
+ *       404:
+ *         description: Account not found
+ */
 router.put('/:id', authorize(), async (req, res, next) => {
   try {
     // Users can only update their own account, admins can update any
@@ -284,7 +584,28 @@ router.put('/:id', authorize(), async (req, res, next) => {
   }
 });
 
-// DELETE /accounts/:id — delete account
+/**
+ * @swagger
+ * /accounts/{id}:
+ *   delete:
+ *     summary: Delete an account
+ *     tags: [Accounts]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Account deleted
+ *       401:
+ *         description: Unauthorised
+ *       404:
+ *         description: Account not found
+ */
 router.delete('/:id', authorize(), async (req, res, next) => {
   try {
     // Users can only delete their own account, admins can delete any

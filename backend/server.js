@@ -3,6 +3,8 @@ const express = require('express');
 const path = require('path');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
+const swaggerUi = require('swagger-ui-express');
+const swaggerSpec = require('./swagger');
 const errorHandler = require('./middleware/error-handler');
 const db = require('./helpers/db');
 
@@ -13,7 +15,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// CORS - allow Angular frontend (dev: localhost:4200, prod: same origin)
+// CORS - allow Angular frontend
 const corsOrigin = process.env.CORS_ORIGIN || 'http://localhost:4200';
 app.use(cors({
   origin: (origin, callback) => {
@@ -21,10 +23,16 @@ app.use(cors({
     if (!origin || origin === corsOrigin) {
       callback(null, true);
     } else {
-      callback(null, true); // Allow all origins for now; tighten in production
+      callback(null, true); // Allow all for dev; tighten in production
     }
   },
   credentials: true
+}));
+
+// Swagger API Documentation
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+  customCss: '.swagger-ui .topbar { display: none }',
+  customSiteTitle: 'Angular Auth API Docs'
 }));
 
 // API routes
@@ -40,7 +48,7 @@ app.get('*', (req, res) => {
   if (require('fs').existsSync(indexPath)) {
     res.sendFile(indexPath);
   } else {
-    res.json({ message: 'Angular Auth API is running 🚀' });
+    res.json({ message: 'Angular Auth API is running 🚀. Visit /api-docs for API documentation.' });
   }
 });
 
@@ -53,6 +61,7 @@ const PORT = process.env.PORT || 4000;
 db.initialize().then(() => {
   app.listen(PORT, () => {
     console.log(`✅ Server running on port ${PORT}`);
+    console.log(`📖 API Docs: http://localhost:${PORT}/api-docs`);
   });
 }).catch(err => {
   console.error('❌ Failed to initialize database:', err);
