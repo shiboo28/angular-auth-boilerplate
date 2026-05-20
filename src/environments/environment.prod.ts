@@ -1,4 +1,4 @@
 export const environment = {
   production: true,
-  apiUrl: 'https://angular-auth-boilerplate-lisao.up.railway.app'
+  apiUrl: 'https://node-mysql-api-production.up.railway.app'
 };
