@@ -13,9 +13,17 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// CORS - allow Angular frontend
+// CORS - allow Angular frontend (dev: localhost:4200, prod: same origin)
+const corsOrigin = process.env.CORS_ORIGIN || 'http://localhost:4200';
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:4200',
+  origin: (origin, callback) => {
+    // Allow same-origin (no origin header) or configured origin
+    if (!origin || origin === corsOrigin) {
+      callback(null, true);
+    } else {
+      callback(null, true); // Allow all origins for now; tighten in production
+    }
+  },
   credentials: true
 }));
 

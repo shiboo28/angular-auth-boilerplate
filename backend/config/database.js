@@ -1,15 +1,9 @@
 const { Sequelize } = require('sequelize');
 
-// Railway provides DATABASE_URL automatically when you link a PostgreSQL service
-const sequelize = new Sequelize(process.env.DATABASE_URL, {
-  dialect: 'postgres',
-  logging: false,
-  dialectOptions: {
-    ssl: process.env.NODE_ENV === 'production' ? {
-      require: true,
-      rejectUnauthorized: false
-    } : false
-  }
+// Railway provides MYSQL_URL automatically when you link a MySQL service
+const sequelize = new Sequelize(process.env.MYSQL_URL || process.env.DATABASE_URL, {
+  dialect: 'mysql',
+  logging: false
 });
 
 module.exports = sequelize;
