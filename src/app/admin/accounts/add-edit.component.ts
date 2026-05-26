@@ -45,8 +45,20 @@ export class AddEditComponent implements OnInit {
     this.alertService.clear();
     if (this.form.invalid) return;
     this.loading = true;
+
+    const formData = { ...this.form.value };
+
+    // If password is empty in edit mode, remove it from payload
+    if (!this.isAddMode && !formData.password) {
+      delete formData.password;
+      delete formData.confirmPassword;
+    } else if (formData.password) {
+      // Always add confirmPassword to match backend validation
+      formData.confirmPassword = formData.password;
+    }
+
     if (this.isAddMode) {
-      this.accountService.create(this.form.value)
+      this.accountService.create(formData)
         .pipe(first())
         .subscribe({
           next: () => {
@@ -56,7 +68,7 @@ export class AddEditComponent implements OnInit {
           error: (err: any) => { this.error = err; this.loading = false; }
         });
     } else {
-      this.accountService.update(this.id!, this.form.value)
+      this.accountService.update(this.id!, formData)
         .pipe(first())
         .subscribe({
           next: () => {
